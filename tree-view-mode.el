@@ -3,7 +3,7 @@
 
 ;; Author:   fubuki@frill.org
 ;; Keywords: tools unix
-;; Version:  @(#)$Revision: 1.42 $
+;; Version:  @(#)$Revision: 1.44 $
 
 ;; This program is free software: you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -28,7 +28,7 @@
 ;;; Code:
 (require 'tree)
 
-(defconst tree-view-mode-version "$Revision: 1.42 $")
+(defconst tree-view-mode-version "$Revision: 1.44 $")
 
 (if (boundp 'tree-view-mode) (setq tree-view-mode 'tree-view-mode))
 
@@ -312,10 +312,10 @@
 PREFIX 在りだとフルパスになる."
   (interactive "P")
   (let ((result (tree-point-filename prefix)))
-    (and result (kill-new result) (message "%s" result))))
+    (when result (kill-new result) (message "%s" result))))
 
 (defun tree-live-branch (ov)
-  "OV が範囲内に収まる Overlay すべてを 'tree-overlays-list' から返す."
+  "OV が範囲内に収まる Overlay すべてを `tree-overlays-list' から返す."
   (let (result)
     (dolist (o tree-overlays-list (reverse result))
       (if (tree-overlays-in ov o)
