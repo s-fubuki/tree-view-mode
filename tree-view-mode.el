@@ -1,9 +1,9 @@
 ;;; tree-view-mode.el --
-;; Copyright (C) 2022 fubuki
+;; Copyright (C) 2022, 2023, 2024, 2025 fubuki
 
-;; Author:   fubuki@frill.org
+;; Author:   fubuki at frill.org
 ;; Keywords: tools unix
-;; Version:  @(#)$Revision: 1.44 $
+;; Version:  @(#)$Revision: 1.48 $
 
 ;; This program is free software: you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -28,7 +28,7 @@
 ;;; Code:
 (require 'tree)
 
-(defconst tree-view-mode-version "$Revision: 1.44 $")
+(defconst tree-view-mode-version "$Revision: 1.48 $")
 
 (if (boundp 'tree-view-mode) (setq tree-view-mode 'tree-view-mode))
 
@@ -56,7 +56,7 @@
               beg    (line-end-position))
         (when (< length (tree-text-next-branch-length))
           (let (tmp)
-            (tree-add-properties (match-beginning 3) beg '(face tree-directory))
+            (tree-add-properties (match-beginning 3) beg '(tree-view directory))
             (forward-line)
             (setq tmp (tree-text2list))
             (setq tree-directory-total (1+ tree-directory-total))
@@ -124,14 +124,14 @@
       (while (invisible-p (point)) (forward-char -1))
       (setq pos
             (next-single-char-property-change
-             (line-beginning-position) 'face nil (line-end-position))
-            pty (get-char-property pos 'face))
-      (if (eq pty 'tree-directory) pos))))
+             (line-beginning-position) 'tree-view nil (line-end-position))
+            pty (get-char-property pos 'tree-view))
+      (if (eq pty 'directory) pos))))
 
 (defun tree-include-directory-p (beg end)
   "BEG END 間にディレクトリが在れば non-nil."
   (not (eq end
-           (next-single-char-property-change beg 'face nil end))))
+           (next-single-char-property-change beg 'tree-view nil end))))
 
 (defun tree-position ()
   (let ((dp (tree-directory-line-p)))
@@ -314,10 +314,21 @@ PREFIX 在りだとフルパスになる."
   (let ((result (tree-point-filename prefix)))
     (when result (kill-new result) (message "%s" result))))
 
+(defun tree-open-directory ()
+  "ポイントのディレクトリを dired で隣ウィンドウに開く."
+  (interactive)
+  (let* ((file (tree-point-filename 'full))
+         (dir (file-name-directory file)))
+    (dired-other-window dir)
+    (dired-goto-file file)))
+
+(defun tree-overlay-sort (lst)
+  (sort lst (lambda (ov1 ov2) (< (overlay-start ov1) (overlay-start ov2)))))
+
 (defun tree-live-branch (ov)
   "OV が範囲内に収まる Overlay すべてを `tree-overlays-list' から返す."
   (let (result)
-    (dolist (o tree-overlays-list (reverse result))
+    (dolist (o tree-overlays-list (tree-overlay-sort result))
       (if (tree-overlays-in ov o)
           (setq result (cons o result))))))
 
@@ -359,7 +370,7 @@ PREFIX 在りだとフルパスになる."
     (forward-line)
     (dotimes (i arg)
       (while (progn
-               (goto-char (next-single-char-property-change (point) 'face))
+               (goto-char (next-single-char-property-change (point) 'tree-view))
                (and (not (eobp)) (or (eolp) (invisible-p (point)))))))))
   
 (defun tree-previous-directory (&optional arg)
@@ -369,7 +380,7 @@ PREFIX 在りだとフルパスになる."
     (beginning-of-line)
     (dotimes (i arg)
       (while (progn
-               (goto-char (previous-single-char-property-change (point) 'face))
+               (goto-char (previous-single-char-property-change (point) 'tree-view))
                (and (not (bobp)) (or (eolp) (invisible-p (point)))))))))
 
 (defun tree-occur (regexp)
@@ -400,6 +411,7 @@ PREFIX 在りだとフルパスになる."
     (define-key map "\C-c\C-s"  'tree-point-branch-show)
     (define-key map "o"         'tree-occur)
     (define-key map "w"         'tree-copy-filename)
+    (define-key map "\M-o"      'tree-open-directory)
     (define-key map "="         'tree-at-overlays)
     (define-key map "q"         'quit-window)
     (define-key map [menu-bar tree] (cons "Tree" menu-map))
@@ -408,6 +420,8 @@ PREFIX 在りだとフルパスになる."
     (define-key menu-map [tree-buffer-to-list-file]
                 '("Write list" . tree-buffer-to-list-file))
     (define-key menu-map [dashes3] '("--"))
+    (define-key menu-map [tree-open-directory]
+                '("Open Directory" . tree-open-directory))
     (define-key menu-map [tree-copy-filename]
                 '("Copy Filename" . tree-copy-filename))
     (define-key menu-map [dashes2] '("--"))
@@ -432,6 +446,8 @@ PREFIX 在りだとフルパスになる."
                 '("Next Directory" . tree-next-directory))
     map))
 
+(defvar tree-view-mode-font-lock easy-tree-view-mode-font-lock)
+
 (define-derived-mode tree-view-mode fundamental-mode "Tree-view"
   "View Tree text.
 \\{tree-view-mode-map}"
@@ -448,7 +464,7 @@ PREFIX 在りだとフルパスになる."
     (setq-local tree-overlays-list (tree-make-overlap (tree-text2list)))
     (and tree-progress-border (> tree-directory-total tree-progress-border)
          (message "make overlay...done")))
-    
+  (setq-local font-lock-defaults '(tree-view-mode-font-lock t))
   (setq-local truncate-lines t)
   (setq-local buffer-read-only t)
   (setq-local view-read-only nil)

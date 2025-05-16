@@ -1,5 +1,15 @@
-#+date: Sat Apr 30 08:25:51 2022
+#+date: Sat May 17 07:52:40 2025
 #+author: fubuki
 #+title: tree-view-mode
 Tree command and display operation mode by elisp.
 There is also a utility.
+
+* May 17 2025 version
+** fixed: `tree-live-branch'
+  場合によって順列がおかしくなるのを修正.
+  この関数を呼んでいる `tree-point-filename' 等で
+  パスの順列がおかしくなることがあった.
+
+** changed: ハイライトを font-locak によるものに変更
+
+** add: ファイル名表示に関するカスタム変数 `tree-file-name-deco'

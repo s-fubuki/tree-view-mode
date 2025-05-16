@@ -1,10 +1,10 @@
-;;; tree.el -- Files tree.
+;;; tree.el --- Files tree.
 
-;; Copyright (C) 2017, 2018, 2019, 2020, 2021, 2022 fubuki
+;; Copyright (C) 2017 - 2025 fubuki
 
-;; Author:   fubuki@frill.org
+;; Author:   fubuki at frill.org
 ;; Keywords: tools unix
-;; Version:  @(#)$Revision: 1.51 $
+;; Version:  @(#)$Revision: 1.63 $
 
 ;; This program is free software: you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -33,20 +33,29 @@
 ;;; Code:
 (require 'esh-io)
 (require 'dired)
+(require 'seq)
 (defvar tree-view-mode 'easy-tree-view-mode)
 
-(defconst tree-version "$Revision: 1.51 $")
+(defconst tree-version "$Revision: 1.63 $")
 
 (defgroup tree nil
   "Files tree."
-  :group   'applications
+  :group   'local
   :version "29.0.50")
+
+(defgroup tree-face nil
+  "Files tree faces."
+  :group   'tree
+  :group   'faces)
 
 (defvar tree-opt-symbols '((?s . size) (?D . date) (?Q . quote) (?d . dir)))
 
 (defcustom tree-options nil
-  "Default option.  `tree-opt-symbols' CDR を \(date size) などと list でセットする."
-  :type  '(repeat symbol)
+  "Default option."
+  :type  '(choice
+           (const :tag "Disable" nil) ;; (const :tag "Enable All" t)
+           (repeat :tag "Individual"
+                   (choice (const size) (const date) (const quote) (const dir))))
   :group 'tree)
 
 (defcustom tree-eshell-options tree-options
@@ -56,7 +65,7 @@
 
 (defcustom tree-ignored-directories nil
   "Ignored directories."
-  :type  'regexp
+  :type  '(choice regexp (const nil))
   :group 'tree)
 
 (defcustom tree-buffer-name "*Tree %s*"
@@ -67,34 +76,75 @@
 (defvar tree-date-format "%Y-%m-%d %H:%M:%S")
 
 (defvar tree-branch-regexp
-  "^\\(?1:.*[|`]-- \\)\\(?:\\[\\(?2:[-: 0-9]+?\\)\\] \\)?\\(?3:\"?.+\"?\\)")
+  "^\\(?1:.*[|`]-- \\)\\(?2:\\[[-: 0-9]+?\\] \\)?\\(?3:\"?.+\"?\\)")
+
 (defvar tree-branch-term "`-- ")
+
+(defvar tree-directory-regexp
+  "^\\(?1:.*[|`]-- \\)\\(?2:\\[[-: 0-9]+?\\] \\)?\\(?3:\"?.+/\"?\\)$")
 
 (defvar tree-directory nil)
 
-(defcustom tree-search-case-fold t
+(defcustom tree-case-fold-search case-fold-search
   "nil なら大文字小文字を区別."
   :type  'boolean
+  :group 'tree)
+
+(defcustom tree-sort-function #'tree-string-lessp
+  "ふたつの引数を取り最初の引数の方が大きければ真を戻す関数.
+渡される引数書式は `file-attributes' の戻値."
+  :type '(choice (const :tag "No Sort" nil)
+                 (const :tag "Dictionary Order" tree-string-lessp)
+                 (const :tag "Without \"The \"" tree-without-definite-article)
+                 (function :tag "A B Compare function"))
+  :group 'tree)
+
+(defcustom tree-print-seconds 60
+  "Tree print time.
+数値ならその秒以上処理時間がかかると完了時にその秒数を表示.
+non-nil なら常に表示, nil なら表示しない."
+  :type '(choice integer (const t) (const nil))
   :group 'tree)
 
 (defface tree-directory
     '((t :inherit dired-directory))
   "tree view mode directory face."
-  :group 'faces
+  :group 'tree-face)
+
+(defface tree-branch
+    '((t :inherit font-lock-builtin-face))
+  "tree view mode branch face."
+  :group 'tree-face)
+
+(defface tree-attribute
+    '((t :inherit italic))
+  "tree view mode directory face."
+  :group 'tree-face)
+
+(defcustom tree-file-name-deco nil
+  "Print file name, Tow arguments function.
+NIL なら `tree-quote-file-name' が使われます.
+引数は先にファイル名、続けてディレクトリ名のふたつです."
+  :type '(choice (const nil) function)
   :group 'tree)
+
+(defun tree-quote-file-name (file &optional dummy)
+  (if (memq 'quote tree-options)
+      (format "\"%s\"" file)
+    file))
 
 (defun tree-quote (leaf &optional path)
   "`tree-options' に従い LEAF をフォーマット文字列にして戻す.
 LEAF は \(filename . attributes) のコンスセル.
 PATH が non-nil ならファイル名にプリペンドしてフルパスにる."
   (let* ((file (car leaf))
+         (dir  (get-text-property 0 'directory file))
          (attr (cdr leaf))
          (opts tree-options)
          (date (and (memq 'date opts) (or (file-attribute-modification-time attr) 0)))
          (size (and (memq 'size opts) (or (file-attribute-size attr) 0)))
          (file (if (car attr) (concat file "/") file))
-         (file (if path (concat path file) file))
-         (file (if (memq 'quote opts) (format "\"%s\"" file) file)))
+         (file (if path (concat path file) file)))
     (concat
      (when (or date size)
        (format "[%s] "
@@ -102,7 +152,7 @@ PATH が non-nil ならファイル名にプリペンドしてフルパスにる
                 (and size (format "%11d" size))
                 (and size date " ")
                 (and date (format-time-string tree-date-format date)))))
-     file)))
+     (funcall (or tree-file-name-deco #'tree-quote-file-name) file dir))))
 
 ;;;###autoload
 (defun tree-directory-make-list (dir)
@@ -117,18 +167,17 @@ dir と file は其々 \(filename . attributes) のコンスセルになる.
     (cons (cons dir (file-attributes dir)) (tree--directory-make-list dir))))
 
 (defun tree--directory-make-list (dir)
-  (let ((files (tree-directory-files dir))
+  (let ((rest (tree-directory-files dir))
 	leaf result)
-    (while files
-      (setq leaf  (car files)
-	    files (cdr files))
+    (while rest
+      (setq leaf (car rest)
+	    rest (cdr rest))
       (if (file-accessible-directory-p (expand-file-name (car leaf) dir))
-          (setq result
-                (cons
-                 (cons
-                  leaf
-	          (tree--directory-make-list (expand-file-name (car leaf) dir)))
-                 result))
+          (push
+           (cons
+            leaf
+	    (tree--directory-make-list (expand-file-name (car leaf) dir)))
+           result)
         (push leaf result)))
     (reverse result)))
 
@@ -138,7 +187,7 @@ dir と file は其々 \(filename . attributes) のコンスセルになる.
 
 ;;;###autoload
 (defun tree-directory-insert (dir-list &optional dir-only flat)
-  "'tree-directory-make-list' で作った DIR-LIST を Tree 形式でカレントバッファに挿入.
+  "`tree-directory-make-list' で作った DIR-LIST を Tree 形式でカレントバッファに挿入.
 DIR-ONLY が non-nil なら Directory のみをプリント.
 FLAT が non-nil なら平面構造で印字."
   (let ((dir (caar dir-list))
@@ -150,7 +199,7 @@ FLAT が non-nil なら平面構造で印字."
 (defun tree--directory-insert (dir-list dir-only &optional branch)
   (let ((files dir-list)
         (branch (or branch ""))
-        leaf result)
+        leaf)
     (while files
       (setq leaf  (car files)
 	    files (cdr files))
@@ -165,7 +214,7 @@ FLAT が non-nil なら平面構造で印字."
 (defun tree--directory-flat-insert (dir-list dir-only &optional branch)
   (let ((files dir-list)
         (branch (or branch ""))
-        leaf result)
+        leaf)
     (while files
       (setq leaf  (car files)
 	    files (cdr files))
@@ -272,26 +321,46 @@ tree text 側もそれは同じなので不整合はない."
       (looking-at tree-branch-regexp)
       (length (match-string-no-properties 1)))))
 
-(defun tree-directory-files (dir)
-  "`directory-files' for directory only option `dir'."
-  (let ((files
-	 (tree-choice (directory-files-and-attributes dir nil "[^.][^.]?\\'")))
-	result)
-    (if (memq 'dir tree-options)
-	(dolist (a files (reverse result))
-	  (if (and (cadr a)
-                   (file-accessible-directory-p (expand-file-name (car a) dir)))
-	      (setq result (cons a result))))
-      files)))
+(defun tree-string-lessp (a b)
+  (string-lessp (car a) (car b)))
+  
+(defun tree-without-definite-article (a b)
+  "ワード頭の \"the \" を省いて A と B を文字列比較."
+  (let ((a (car a))
+        (b (car b)))
+    (when (string-match "\\`the \\(?1:.+\\)" a)
+      (setq a (match-string 1 a)))
+    (when (string-match "\\`the \\(?1:.+\\)" b)
+      (setq b (match-string 1 b)))
+    (string-lessp a b)))
 
-(defun tree-choice (lst)
-  "Creates and returns a LST with `tree-ignored-directories' removed from LST."
-  (let ((re tree-ignored-directories)
-        result)
-    (if re
-        (dolist (a lst (reverse result))
-          (unless (string-match re (car a))
-            (setq result (cons a result))))
+(defun tree-directory-files (dir)
+  "DIR 下のファイルとディレクトリの属性をリストで戻す.
+`tree-options' メンバーに dir が在ればディレクトリのみを集める.
+戻されるリストは `tree-sort-function' で指定した関数でソートされ
+正規表現 `tree-ignored-directories' にマッチするディレクトリや
+アクセスできないディレクトリは除外される."
+  (let ((lst (directory-files-and-attributes
+              dir nil directory-files-no-dot-files-regexp 'no-sort)))
+    (when tree-sort-function
+      (setq lst (sort (copy-sequence lst) tree-sort-function)))
+    (setq lst (mapcar (lambda (f)
+                        (cons
+                         (progn
+                           (put-text-property 0 1 'directory dir (car f))
+                           (car f))
+                         (cdr f)))
+                      lst))
+    (if (memq 'dir tree-options)
+        (seq-remove
+         (lambda (a)
+           (cond
+            ((and (cadr a) tree-ignored-directories
+                  (string-match tree-ignored-directories (car a))))
+            ((and (cadr a)
+                  (not (file-accessible-directory-p (expand-file-name (car a) dir)))))
+            ((null (cadr a)))))
+         lst)
       lst)))
 
 ;;;###autoload
@@ -315,24 +384,32 @@ tree text 側もそれは同じなので不整合はない."
   (eshell-buffered-print (format "%s\n" dir))
   (eshell-buffered-print (tree-string dir))
   (eshell-flush))
-
 
 ;;;###autoload
 (defun tree-buffer-display (dir-or-list &optional prefix)
   "Directory Name  もしくは List file Name である DIR-OR-LIST を新規バッファに表示.
-PREFIX が 0 ならフラット表示する." ; 引数なし prefix は予約として空けてある.
+PREFIX が 0 ならフラット表示する.
+変数 `tree-print-seconds' が整数なら
+その秒数以上時間がかかれば完了時に時間を表示する." ; 引数なし prefix は予約として空けてある.
   (interactive "GFile or Dir: \np")
-  (let ((buff (generate-new-buffer (format tree-buffer-name dir-or-list)))
+  (let ((start (float-time))
+        (buff (generate-new-buffer (format tree-buffer-name dir-or-list)))
         (flat (if (and (numberp prefix) (zerop prefix)) t))
         (func (if (file-accessible-directory-p dir-or-list)
                   #'tree-directory-make-list
-                #'tree-read-list)))
+                #'tree-read-list))
+        work-times)
     (with-current-buffer buff
       (tree-directory-insert (funcall func dir-or-list) nil flat)
       (set-buffer-modified-p nil)
       (or prefix (funcall tree-view-mode))
       (goto-char (point-min)))
-    (switch-to-buffer buff)))
+    (switch-to-buffer buff)
+    (setq work-times (round (- (float-time) start)))
+    (if (or (and (integerp tree-print-seconds) (< tree-print-seconds work-times))
+            (and tree-print-seconds (not (integerp tree-print-seconds))))
+        (message (format-seconds "%hh %mm %z%ss...done." work-times))
+      (message "done."))))
 
 ;;;###autoload
 (defun dtree (dir &optional prefix)
@@ -440,12 +517,12 @@ PATH はポイントしている要素の path 構成を保持している."
 ;;;###autoload
 (defun dired-tree-search (regexp &optional prefix)
   "tree-search の dired インターフェイス. カーソルの File name が tree-search に渡される.
-`tree-search-case-fold' が nil なら大文字小文字を区別する.
+`tree-case-fold-search' が nil なら大文字小文字を区別する.
 prefix 有でこの変数の値が反転する."
   (interactive "sRegexp: \nP")
   (let* ((file (dired-get-filename))
          (case-fold-search
-          (if prefix (not tree-search-case-fold) tree-search-case-fold))
+          (if prefix (not tree-case-fold-search) tree-case-fold-search))
          (match (tree-search regexp (tree-read-list file)))
          (count (length match))
          (buff "*match list*"))
@@ -462,26 +539,26 @@ prefix 有でこの変数の値が反転する."
       (message "\"%s\" was matched %d." regexp count))))
 
 ;; Easy Tree view mode
-(defvar easy-tree-directory-regexp "^.*[|`]-- \\(?:\\[[ :0-9-]+\\] \\)?\\(?1:.+?\\)/$")
+(defvar easy-tree-view-mode-font-lock
+  `((,tree-directory-regexp (1 'tree-branch) (2 'tree-attribute nil 'lax) (3 'tree-directory))
+    (,tree-branch-regexp (1 'tree-branch) (2 'tree-attribute nil 'lax))))
 
 (define-derived-mode easy-tree-view-mode fundamental-mode "Tree"
   (setq buffer-read-only t)
-  (setq-local
-   font-lock-defaults
-   `(((,easy-tree-directory-regexp 1 'tree-directory))))
+  (setq-local font-lock-defaults '(easy-tree-view-mode-font-lock t))
   (define-key easy-tree-view-mode-map ">" 'easy-tree-next-directory)
   (define-key easy-tree-view-mode-map "<" 'easy-tree-previous-directory)
   (define-key easy-tree-view-mode-map "q" 'quit-window))
 
 (defun easy-tree-next-directory ()
   (interactive)
-  (re-search-forward easy-tree-directory-regexp nil t)
-  (goto-char (match-beginning 1)))
+  (re-search-forward tree-directory-regexp nil t)
+  (goto-char (match-beginning 3)))
 
 (defun easy-tree-previous-directory ()
   (interactive)
-  (re-search-backward easy-tree-directory-regexp nil t)
-  (goto-char (match-beginning 1)))
+  (re-search-backward tree-directory-regexp nil t)
+  (goto-char (match-beginning 3)))
 
 (provide 'tree)
 ;; fin.
