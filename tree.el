@@ -4,7 +4,7 @@
 
 ;; Author:   fubuki at frill.org
 ;; Keywords: tools unix
-;; Version:  @(#)$Revision: 1.63 $
+;; Version:  @(#)$Revision: 1.64 $
 
 ;; This program is free software: you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -36,7 +36,7 @@
 (require 'seq)
 (defvar tree-view-mode 'easy-tree-view-mode)
 
-(defconst tree-version "$Revision: 1.63 $")
+(defconst tree-version "$Revision: 1.64 $")
 
 (defgroup tree nil
   "Files tree."
@@ -105,6 +105,8 @@
 non-nil なら常に表示, nil なら表示しない."
   :type '(choice integer (const t) (const nil))
   :group 'tree)
+
+(defvar tree-buffer-display-hook nil)
 
 (defface tree-directory
     '((t :inherit dired-directory))
@@ -405,6 +407,7 @@ PREFIX が 0 ならフラット表示する.
       (or prefix (funcall tree-view-mode))
       (goto-char (point-min)))
     (switch-to-buffer buff)
+    (run-hooks 'tree-buffer-display-hook)
     (setq work-times (round (- (float-time) start)))
     (if (or (and (integerp tree-print-seconds) (< tree-print-seconds work-times))
             (and tree-print-seconds (not (integerp tree-print-seconds))))

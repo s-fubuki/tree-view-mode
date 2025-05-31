@@ -1,4 +1,4 @@
-#+date: $Date: 2025-05-03 08:09:44+09 $
+#+date: $Date: 2025-05-17 07:43:43+09 $
 #+title: tree-view-mode
 #+author: fubuki
 * tree-view-mode.el
@@ -110,6 +110,10 @@
   1. GNU Emacs 28.1 (build 2, x86_64-w64-mingw32) of 2022-04-22
   1. GNU Emacs 29.0.50 (build 1, x86_64-w64-mingw32) of 2022-04-03
   1. GNU Emacs 30.0.50 (build 1, x86_64-w64-mingw32) of 2023-04-16
+
+* CHANGES
+** tree.el: 1.64
+*** add: `tree-buffer-display-hook'.
 
 # Local Variables:
 # mode: org
