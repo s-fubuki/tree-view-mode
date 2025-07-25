@@ -1,8 +1,11 @@
-#+date: Sat May 17 07:52:40 2025
+#+date: Sat Jul 26 07:51:41 2025
 #+author: fubuki
 #+title: tree-view-mode
 Tree command and display operation mode by elisp.
 There is also a utility.
+
+* Jul 26 2025
+** lexical-binding:t でバイトコンパイルできるようにする.
 
 * May 17 2025 version
 ** fixed: `tree-live-branch'

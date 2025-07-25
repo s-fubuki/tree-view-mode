@@ -1,9 +1,9 @@
-;;; tree-view-mode.el --
+;;; tree-view-mode.el -- -*- lexical-binding:t -*-
 ;; Copyright (C) 2022, 2023, 2024, 2025 fubuki
 
 ;; Author:   fubuki at frill.org
 ;; Keywords: tools unix
-;; Version:  @(#)$Revision: 1.48 $
+;; Version:  @(#)$Revision: 2.1 $
 
 ;; This program is free software: you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -28,7 +28,7 @@
 ;;; Code:
 (require 'tree)
 
-(defconst tree-view-mode-version "$Revision: 1.48 $")
+(defconst tree-view-mode-version "$Revision: 2.1 $")
 
 (if (boundp 'tree-view-mode) (setq tree-view-mode 'tree-view-mode))
 
@@ -47,11 +47,11 @@
 (defun tree-text2list ()
   "Directory tree を表示したカレントバッファから \
 ディレクトリの始点と終点を集め Tree 構造を維持したままリストにする."
-  (let (branch name length beg result)
+  (let (branch _name length beg result)
     (catch 'break
       (while (re-search-forward tree-branch-regexp nil t)
         (setq branch (match-string-no-properties 1)
-              name   (match-string-no-properties 3) ; 未使用
+              ;; _name  (match-string-no-properties 3) ; 未使用
               length (length branch)
               beg    (line-end-position))
         (when (< length (tree-text-next-branch-length))
@@ -191,10 +191,9 @@
 (defun tree-point-invert ()
   "ポイントのディレクトリを折り畳み/展開する."
   (interactive)
-  (let ((ov  (car (overlays-at (tree-position) 'sorted)))
-        val)
+  (let ((ov  (car (overlays-at (tree-position) 'sorted))))
     (if ov
-        (if (setq val (or (overlay-get ov 'invisible)))
+        (if (overlay-get ov 'invisible)
             (tree-point-show)
           (tree-point-hide))
       (tree-next-line))))
@@ -299,8 +298,7 @@
   "ポイントのブロックから枝の伸びているブロックをすべて開く."
   (interactive)
   (let* ((pos (tree-position))
-         (ov (cdr (get-char-property-and-overlay pos tree-symbol)))
-         (end (overlay-end ov)))
+         (ov (cdr (get-char-property-and-overlay pos tree-symbol))))
     (dolist (o tree-overlays-list)
       (and (tree-overlays-in o ov)
            (overlay-put o 'invisible nil)))
@@ -332,8 +330,8 @@ PREFIX 在りだとフルパスになる."
       (if (tree-overlays-in ov o)
           (setq result (cons o result))))))
 
-(defun tree-hide-block-open (dummy)
-  ;; 何故だか DUMMY と OV が一致していないときがあるので別途取得.
+(defun tree-hide-block-open (_dummy)
+  ;; 何故だか _DUMMY と OV が一致していないときがあるので別途取得.
   (let* ((ov (cdr (get-char-property-and-overlay (point) tree-symbol)))
          (ovs (tree-live-branch ov)))
     (dolist (o tree-overlays-list)
@@ -346,7 +344,7 @@ PREFIX 在りだとフルパスになる."
   "ポイントを次の行のファイル名先頭に移動."
   (interactive "p")
   (let ((arg (prefix-numeric-value arg)))
-    (dotimes (i arg)
+    (dotimes (_ arg)
       (while (progn
                (re-search-forward tree-branch-regexp nil t)
                (goto-char (match-beginning 3))
@@ -356,7 +354,7 @@ PREFIX 在りだとフルパスになる."
   "ポイントを前の行のファイル名先頭に移動."
   (interactive "p")
   (let ((arg (prefix-numeric-value arg)))
-    (dotimes (i arg)
+    (dotimes (_ arg)
       (while (progn
                (beginning-of-line)
                (re-search-backward tree-branch-regexp nil t)
@@ -368,7 +366,7 @@ PREFIX 在りだとフルパスになる."
   (interactive "p")
   (let ((arg (prefix-numeric-value arg)))
     (forward-line)
-    (dotimes (i arg)
+    (dotimes (_ arg)
       (while (progn
                (goto-char (next-single-char-property-change (point) 'tree-view))
                (and (not (eobp)) (or (eolp) (invisible-p (point)))))))))
@@ -378,7 +376,7 @@ PREFIX 在りだとフルパスになる."
   (interactive "p")
   (let ((arg (prefix-numeric-value arg)))
     (beginning-of-line)
-    (dotimes (i arg)
+    (dotimes (_ arg)
       (while (progn
                (goto-char (previous-single-char-property-change (point) 'tree-view))
                (and (not (bobp)) (or (eolp) (invisible-p (point)))))))))

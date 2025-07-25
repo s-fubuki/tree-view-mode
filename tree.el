@@ -1,10 +1,10 @@
-;;; tree.el --- Files tree.
+;;; tree.el --- Files tree. -*- lexical-binding:t -*-
 
 ;; Copyright (C) 2017 - 2025 fubuki
 
 ;; Author:   fubuki at frill.org
 ;; Keywords: tools unix
-;; Version:  @(#)$Revision: 1.64 $
+;; Version:  @(#)$Revision: 2.1 $
 
 ;; This program is free software: you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -36,7 +36,7 @@
 (require 'seq)
 (defvar tree-view-mode 'easy-tree-view-mode)
 
-(defconst tree-version "$Revision: 1.64 $")
+(defconst tree-version "$Revision: 2.1 $")
 
 (defgroup tree nil
   "Files tree."
@@ -130,7 +130,7 @@ NIL なら `tree-quote-file-name' が使われます.
   :type '(choice (const nil) function)
   :group 'tree)
 
-(defun tree-quote-file-name (file &optional dummy)
+(defun tree-quote-file-name (file &optional _dummy)
   (if (memq 'quote tree-options)
       (format "\"%s\"" file)
     file))
@@ -368,24 +368,22 @@ tree text 側もそれは同じなので不整合はない."
 ;;;###autoload
 (defun tree-string (dir-or-list)
   "Return tree string of DIR-OR-LIST."
-  (let (dir func)
+  (let (func)
     (cond
      ((file-accessible-directory-p dir-or-list)
       (setq func #'tree-directory-make-list
-            dir (expand-file-name dir-or-list default-directory)))
+            dir-or-list (expand-file-name dir-or-list default-directory)))
      (t
       (setq func #'tree-read-list
-            dir (caar dir-or-list)
             dir-or-list (cdr dir-or-list))))
     (with-temp-buffer
       (tree-directory-insert (funcall func dir-or-list))
       (buffer-string))))
 
 (defun do-eshell-tree (dir)
-  (eshell-init-print-buffer)
-  (eshell-buffered-print (format "%s\n" dir))
-  (eshell-buffered-print (tree-string dir))
-  (eshell-flush))
+  (eshell-with-buffered-print
+    (eshell-buffered-print (format "%s\n" dir))
+    (eshell-buffered-print (tree-string dir))))
 
 ;;;###autoload
 (defun tree-buffer-display (dir-or-list &optional prefix)
@@ -469,7 +467,7 @@ PREFIX が 0 ならフラット表示する.
       (insert-file-contents file)
       (condition-case err
 	  (setq lst (read (current-buffer)))
-	(error (error "Illegal file `%s'" file))))
+	(error (error "%s `%s'" (error-message-string err) file))))
     lst))
 
 ;;;###autoload

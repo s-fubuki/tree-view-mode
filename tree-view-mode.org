@@ -111,10 +111,6 @@
   1. GNU Emacs 29.0.50 (build 1, x86_64-w64-mingw32) of 2022-04-03
   1. GNU Emacs 30.0.50 (build 1, x86_64-w64-mingw32) of 2023-04-16
 
-* CHANGES
-** tree.el: 1.64
-*** add: `tree-buffer-display-hook'.
-
 # Local Variables:
 # mode: org
 # buffer-read-only: t
